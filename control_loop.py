@@ -32,7 +32,7 @@ PRINTER_BED_TEMP_THRESHOLD = 25
 GCODE_FILENAME = 'demo_0.2mm_PLA_MK3S_5m.gcode'
 
 # Connection Parameters for RTDE client
-ROBOT_HOST = "34.72.56.243"
+ROBOT_HOST = "192.168.0.25"
 ROBOT_PORT = 30004
 ROBOT_CONFIG_FILENAME = "control_loop_configuration.xml"
 
@@ -242,6 +242,7 @@ def main():
                 cobot_client.watchdog.input_int_register_0 = 0
                 if count > 2:
                     break
+            sleep(1)
         print("item removed from printer bed")
     stop_event.set()
 
