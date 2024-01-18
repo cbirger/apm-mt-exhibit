@@ -20,15 +20,16 @@ class GracefulKiller:
 
 
 # Parameters for RTDE (Cobot) Client
-ROBOT_HOST = "192.168.0.14"
+ROBOT_HOST = "192.168.0.11"
 ROBOT_PORT = 30004
 ROBOT_CONFIG_FILENAME = "control_loop_configuration.xml"
 
 # Parameters for OctoRest (Printer) Client
 OCTOPRINT_API_KEY = "530800072D39492E981670EDB6F83617"
 OCTOPRINT_URL = "http://127.0.0.1:5000"
-GCODE_FILENAME = "Test_PLA_MK4_5m.gcode"
-PRINTER_BED_TEMP_THRESHOLD = 25
+GCODE_WITH_PRIME_LINE = "MT_prime_line.gcode"
+GCODE_NO_PRIME_LINE = "MT_no_prime_line.gcode"
+PRINTER_BED_TEMP_THRESHOLD = 40
 
 PRINTER_STATUS_INITIALIZED = 0
 PRINTER_STATUS_IDLE = 1
@@ -108,6 +109,7 @@ class PrinterClient:
 
         try:
             self.con = OctoRest(url=OCTOPRINT_URL, apikey=OCTOPRINT_API_KEY)
+            self.con.connect()
         except Exception as e:
             print(e)
 
@@ -138,7 +140,6 @@ class PrinterClient:
             time.sleep(self.PRINTER_POLL_INTERVAL)
 
     def printer_bed_temp_wait_until(self, threshold):
-        print('waiting for bed to cool...')
         while self.con.printer()['temperature']['bed']['actual'] > threshold:
             time.sleep(self.PRINTER_POLL_INTERVAL)
 
@@ -168,23 +169,24 @@ def main():
 
     print(printer_client.get_server_version())
 
-    # Verify that the print file (defined in the constant variable GCODE_FILENAME) has been
-    # uploaded to the printer
-    file_verified = False
-    for k in printer_client.con.files()['files']:
-        if k['name'] == GCODE_FILENAME:
-            file_verified = True
-            break
-    assert file_verified
+    # Verify that the two print files (defined in the constant variables GCODE_WITH_PRIME_LINE and
+    # GCODE_WITHOUT_PRIME_LINE) have been uploaded to the Octoprint Server
 
-    # select file for printing
-    printer_client.con.select(GCODE_FILENAME, print=False)
-    time.sleep(1)
-    selected_filename = printer_client.con.job_info()['job']['file']['name']
-    assert selected_filename == GCODE_FILENAME
-    assert printer_client.con.state() == 'Operational'
+    file_names = {k['name'] for k in printer_client.con.files('local')['files']}
+    if (GCODE_WITH_PRIME_LINE in file_names) and (GCODE_NO_PRIME_LINE in file_names):
+        print("verified gcode files uploaded to Octoprint Server")
+    else:
+        print("gcode files missing from Octoprint Server")
+        exit()
 
+    first_pass = True
     while not killer.kill_now:
+        if first_pass:
+            # select print job for first pass
+            printer_client.con.select(GCODE_WITH_PRIME_LINE, print=False)
+            time.sleep(1)
+            selected_filename = printer_client.con.job_info()['job']['file']['name']
+            assert selected_filename == GCODE_WITH_PRIME_LINE
 
         print('start new print job')
 
@@ -194,9 +196,18 @@ def main():
         time.sleep(5)
         assert printer_client.con.state() == 'Printing'
         printer_client.printer_cmd_wait('Printing')
-        printer_client.printer_bed_temp_wait_until(PRINTER_BED_TEMP_THRESHOLD)
         print("print job complete, state = {}".format(printer_client.con.state()))
+        print('waiting for bed to cool...')
+        printer_client.printer_bed_temp_wait_until(PRINTER_BED_TEMP_THRESHOLD)
         printer_client.printer_cmd_wait_until('Operational')
+
+        if first_pass:
+            # select print job for subsequent passes
+            printer_client.con.select(GCODE_NO_PRIME_LINE, print=False)
+            time.sleep(1)
+            selected_filename = printer_client.con.job_info()['job']['file']['name']
+            assert selected_filename == GCODE_NO_PRIME_LINE
+            first_pass = False
 
         print("(a) Cobot Status: {}".format(cobot_client.get_cobot_status()))
         assert cobot_client.get_cobot_status() != COBOT_STATUS_PICKING
