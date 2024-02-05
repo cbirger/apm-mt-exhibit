@@ -4,9 +4,10 @@ import datetime
 import json
 
 from PyQt5.QtCore import Qt, QProcess
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QPainter
 from PyQt5.QtWidgets import QMainWindow, QLabel, QApplication, QGridLayout, QWidget, QPushButton, \
     QPlainTextEdit, QMessageBox, QLineEdit, QVBoxLayout, QHBoxLayout, QSpinBox, QToolBar, QTabWidget
+from PyQt5.QtChart import QChart, QChartView, QBarSet, QBarCategoryAxis, QStackedBarSeries, QValueAxis
 
 APP_CONFIG_JSON = 'app_config.json'
 
@@ -34,6 +35,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
 
+        self.setGeometry(100, 100, 1000, 100)
+
         self.app_config_json = resource_path(APP_CONFIG_JSON)
 
         if os.path.exists(self.app_config_json):
@@ -42,7 +45,6 @@ class MainWindow(QMainWindow):
             self.app_config = {}
 
         self.app_config['rtde_config_file'] = resource_path('control_loop_configuration.xml')
-        # self.app_config['app_config'] = resource_path('app_config.json')
         json.dump(self.app_config, open(self.app_config_json, 'w'))
 
         self.start_time = None
@@ -59,18 +61,35 @@ class MainWindow(QMainWindow):
         lego_brick_drawing.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
         self.start_button = QPushButton('Start', self)
+        font = self.start_button.font()
+        font.setBold(True)
+        font.setPointSize(20)
+        self.start_button.setFont(font)
         self.start_button.setToolTip("Start the Machine Tending Control Loop")
         self.start_button.clicked.connect(self.on_start_click)
 
         self.stop_button = QPushButton('Stop', self)
+        font = self.stop_button.font()
+        font.setBold(True)
+        font.setPointSize(20)
+        self.stop_button.setFont(font)
         self.stop_button.setToolTip("Stop the Machine Tending Control Loop")
         self.stop_button.clicked.connect(self.on_stop_click)
         self.stop_button.setDisabled(True)
 
         self.save_config_button = QPushButton('Save Config', self)
+        font = self.save_config_button.font()
+        font.setBold(True)
+        font.setPointSize(20)
+        self.save_config_button.setFont(font)
         self.save_config_button.clicked.connect(self.on_save_config_click)
         self.save_config_button.setDisabled(True)
+
         self.cancel_config_button = QPushButton('Cancel Config Change', self)
+        font = self.cancel_config_button.font()
+        font.setBold(True)
+        font.setPointSize(20)
+        self.cancel_config_button.setFont(font)
         self.cancel_config_button.clicked.connect(self.on_cancel_config_click)
         self.cancel_config_button.setDisabled(True)
 
@@ -85,16 +104,6 @@ class MainWindow(QMainWindow):
         self.max_jobs.setMaximum(50)
         self.max_jobs.setValue(self.app_config.get('max_jobs', 1))
         self.max_jobs.valueChanged.connect(self.max_jobs_changed)
-
-        '''
-        self.cobot_program_label = QLabel("Cobot Program Filename")
-        self.cobot_program = QLineEdit()
-        self.cobot_program.textEdited.connect(self.cobot_program_filename_edited)
-
-        self.cobot_installation_label = QLabel("Cobot Installation Filename")
-        self.cobot_installation = QLineEdit()
-        self.cobot_installation.textEdited.connect(self.cobot_installation_filename_edited)
-        '''
 
         self.gcode_with_prime_line_label = QLabel("G-Code (with Prime Line) Filename")
         self.gcode_with_prime_line = QLineEdit()
@@ -123,6 +132,14 @@ class MainWindow(QMainWindow):
         self.printer_bed_pick_temp.setValue(self.app_config.get('printer_bed_pick_temp', 40))
         self.printer_bed_pick_temp.valueChanged.connect(self.printer_bed_pick_temp_changed)
 
+        self.max_cycle_time_label = QLabel("Max cycle time (seconds, for bar chart display)")
+        self.max_cycle_time = QSpinBox()
+        self.max_cycle_time.setSingleStep(100)
+        self.max_cycle_time.setMinimum(100)
+        self.max_cycle_time.setMaximum(3600)
+        self.max_cycle_time.setValue(self.app_config.get('max_cycle_time', 300))
+        self.max_cycle_time.valueChanged.connect(self.max_cycle_time_changed)
+
         self.stderr_display = QPlainTextEdit()
         self.stderr_display.setReadOnly(True)
         self.stderr_display.setCenterOnScroll(True)
@@ -134,17 +151,41 @@ class MainWindow(QMainWindow):
         self.run_time = QLineEdit()
         self.run_time.setReadOnly(True)
 
-        grid_layout_session_stats = QGridLayout()
-        grid_layout_session_stats.addWidget(apm_logo, 0, 0)
-        grid_layout_session_stats.addWidget(lego_brick_drawing, 0, 1)
-        grid_layout_session_stats.addWidget(self.job_count_label, 1, 0)
-        grid_layout_session_stats.addWidget(self.job_count, 1, 1)
-        grid_layout_session_stats.addWidget(self.run_time_label, 2, 0)
-        grid_layout_session_stats.addWidget(self.run_time, 2, 1)
+        self.series = QStackedBarSeries()
 
-        horizontal_layout_graphics = QHBoxLayout()
-        horizontal_layout_graphics.addWidget(apm_logo)
-        horizontal_layout_graphics.addWidget(lego_brick_drawing)
+        self.printing_bar_set = QBarSet("Printing")
+        self.cooling_bar_set = QBarSet("Cooling")
+        self.pick_and_place_bar_set = QBarSet("Pick and Place")
+        self.series.append(self.printing_bar_set)
+        self.series.append(self.cooling_bar_set)
+        self.series.append(self.pick_and_place_bar_set)
+
+        self.bc_widget = QChart()
+        self.bc_widget.setAnimationOptions(QChart.SeriesAnimations)
+        self.bc_widget.addSeries(self.series)
+
+        cycle_categories = [str(i) for i in range(1, self.app_config['max_jobs']+1)]
+        axisX = QBarCategoryAxis()
+        axisX.append(cycle_categories)
+        axisX.setTitleText("Job Count")
+        self.bc_widget.createDefaultAxes()
+        self.bc_widget.setAxisX(axisX, self.series)
+
+        axisY = QValueAxis()
+        axisY.setRange(0, self.app_config.get('max_cycle_time', 300))
+        axisY.setLabelFormat('%i')
+        axisY.setTitleText("Seconds")
+        self.bc_widget.setAxisY(axisY, self.series)
+
+        chartview = QChartView(self.bc_widget)
+        chartview.setRenderHint(QPainter.Antialiasing)
+        self.bc_widget.setMinimumHeight(300)
+
+        session_stats_layout = QGridLayout()
+        session_stats_layout.addWidget(self.job_count_label, 2, 0)
+        session_stats_layout.addWidget(self.job_count, 2, 1)
+        session_stats_layout.addWidget(self.run_time_label, 3, 0)
+        session_stats_layout.addWidget(self.run_time, 3, 1)
 
         grid_layout_config_fields = QGridLayout()
         grid_layout_config_fields.addWidget(self.cobot_ip_address_label, 0, 0)
@@ -161,17 +202,32 @@ class MainWindow(QMainWindow):
         grid_layout_config_fields.addWidget(self.gcode_with_prime_line, 5, 1)
         grid_layout_config_fields.addWidget(self.gcode_no_prime_line_label, 6, 0)
         grid_layout_config_fields.addWidget(self.gcode_no_prime_line, 6, 1)
+        grid_layout_config_fields.addWidget(self.max_cycle_time_label, 7, 0)
+        grid_layout_config_fields.addWidget(self.max_cycle_time, 7, 1)
 
         horizontal_layout_config_buttons = QHBoxLayout()
         horizontal_layout_config_buttons.addWidget(self.save_config_button)
         horizontal_layout_config_buttons.addWidget(self.cancel_config_button)
 
-        grid_layout_run = QGridLayout()
-        grid_layout_run.addLayout(grid_layout_session_stats, 0, 0)
-        grid_layout_run.addWidget(self.stderr_display, 0, 1)
+        graphics_layout = QHBoxLayout()
+        graphics_layout.addWidget(apm_logo)
+        graphics_layout.addWidget(lego_brick_drawing)
 
-        grid_layout_run.addWidget(self.start_button, 1, 0)
-        grid_layout_run.addWidget(self.stop_button, 1, 1)
+        status_layout_left = QVBoxLayout()
+        status_layout_left.addLayout(graphics_layout)
+        status_layout_left.addLayout(session_stats_layout)
+        status_layout = QHBoxLayout()
+        status_layout.addLayout(status_layout_left)
+        status_layout.addWidget(self.stderr_display)
+
+        start_stop_layout = QHBoxLayout()
+        start_stop_layout.addWidget(self.start_button)
+        start_stop_layout.addWidget(self.stop_button)
+
+        vertical_layout_run_tab = QVBoxLayout()
+        vertical_layout_run_tab.addLayout(status_layout)
+        vertical_layout_run_tab.addWidget(chartview)
+        vertical_layout_run_tab.addLayout(start_stop_layout)
 
         grid_layout_config = QGridLayout()
         grid_layout_config.addLayout(grid_layout_config_fields, 0, 0)
@@ -182,7 +238,7 @@ class MainWindow(QMainWindow):
         tabs.setMovable(False)
 
         self.run_widget = QWidget()
-        self.run_widget.setLayout(grid_layout_run)
+        self.run_widget.setLayout(vertical_layout_run_tab)
         tabs.addTab(self.run_widget, "Run")
 
         self.config_widget = QWidget()
@@ -202,6 +258,12 @@ class MainWindow(QMainWindow):
 
     def max_jobs_changed(self, n):
         self.app_config['max_jobs'] = n
+        self.run_widget.setDisabled(True)
+        self.save_config_button.setDisabled(False)
+        self.cancel_config_button.setDisabled(False)
+
+    def max_cycle_time_changed(self, n):
+        self.app_config['max_cycle_time'] = n
         self.run_widget.setDisabled(True)
         self.save_config_button.setDisabled(False)
         self.cancel_config_button.setDisabled(False)
@@ -238,6 +300,19 @@ class MainWindow(QMainWindow):
 
     def on_save_config_click(self):
         json.dump(self.app_config, open(self.app_config_json, 'w'))
+
+        cycle_categories = [str(i) for i in range(1, self.app_config['max_jobs']+1)]
+        axisX = QBarCategoryAxis()
+        axisX.append(cycle_categories)
+        axisX.setTitleText("Job Count")
+        self.bc_widget.setAxisX(axisX, self.series)
+
+        axisY = QValueAxis()
+        axisY.setRange(0, self.app_config['max_cycle_time'])
+        axisY.setLabelFormat('%i')
+        axisY.setTitleText("Seconds")
+        self.bc_widget.setAxisY(axisY, self.series)
+
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
         self.run_widget.setDisabled(False)
@@ -264,14 +339,19 @@ class MainWindow(QMainWindow):
             'Before launching the machine tending control loop, verify the following:\n\n'
             '(a) the Cobot is powered on and in the normal mode\n'
             '(b) the 3D Printer is idle\n'
-            '(c) the printer bed is clean\n\n'
-            'Once the control loop has started, go to the Polyscope tablet and launch (or restart after protective stop ) the mt_rtde_control_loop program.')
+            '(c) the print sheet is empty and clean\n\n'
+            'IMPORTANT: Once the control loop has started, go to the Polyscope tablet and launch (or restart after protective stop) the mt_rtde_control_loop program.')
         dlg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         dlg.setIcon(QMessageBox.Information)
         button = dlg.exec_()
 
         if button == QMessageBox.Ok:
             self.stderr_message("Launching Control Loop")
+
+            self.printing_bar_set.remove(0, self.printing_bar_set.count())
+            self.cooling_bar_set.remove(0, self.cooling_bar_set.count())
+            self.pick_and_place_bar_set.remove(0,self.pick_and_place_bar_set.count())
+
             self.p = QProcess()
             self.p.readyReadStandardOutput.connect(self.handle_stdout)
             self.p.readyReadStandardError.connect(self.handle_stderr)
@@ -321,6 +401,12 @@ class MainWindow(QMainWindow):
             if self.start_time is not None:
                 runtime_seconds = int(data['current_time']) - self.start_time
                 self.run_time.setText(str(datetime.timedelta(seconds=runtime_seconds)))
+        if 'cycle_stats' in data:
+            raw_cycle_stats = [int(i) for i in data['cycle_stats'].split(',')]
+            cycle_stats = [raw_cycle_stats[i + 1] - raw_cycle_stats[i] for i in range(len(raw_cycle_stats) - 1)]
+            self.printing_bar_set.append(cycle_stats[0])
+            self.cooling_bar_set.append(cycle_stats[1])
+            self.pick_and_place_bar_set.append(cycle_stats[2])
 
     def handle_state(self, state):
         states = {

@@ -252,7 +252,9 @@ class ControlLoop:
                     selected_filename = printer_client.con.job_info()['job']['file']['name']
                     assert selected_filename == GCODE_WITH_PRIME_LINE
 
+                print_start_time = int(time.time())
                 print_to_stderr('start new print job')
+
 
                 cobot_client.update_printer_status_register(CobotClient.PRINTER_STATUS_PRINTING)
 
@@ -260,9 +262,14 @@ class ControlLoop:
                 time.sleep(5)
                 assert printer_client.con.state() == "Printing"
                 printer_client.printer_cmd_wait('Printing')
+
                 print_to_stderr("print job complete")
-                print_to_stderr('waiting for bed to cool...')
+
                 printer_client.printer_bed_temp_wait_until(self.app_config.printer_bed_pick_temp)
+
+                bed_cooling_start_time = int(time.time())
+                print_to_stderr('waiting for bed to cool...')
+
                 printer_client.printer_cmd_wait_until('Operational')
 
                 if print_job_count == 0:
@@ -281,6 +288,8 @@ class ControlLoop:
                 # verify cobot status is picking
                 cobot_status = cobot_client.get_cobot_status()
                 assert cobot_status.int == CobotClient.COBOT_STATUS_PICKING
+
+                pick_and_place_start_time = int(time.time())
                 print_to_stderr("robot arm removing item from printer bed...")
 
                 while cobot_client.get_cobot_status().int == CobotClient.COBOT_STATUS_PICKING:
@@ -290,11 +299,14 @@ class ControlLoop:
 
                 cobot_status = cobot_client.get_cobot_status()
                 assert cobot_status.int == CobotClient.COBOT_STATUS_IDLE
+
+                pick_and_place_finished_time = int(time.time())
                 print_to_stderr("item removed from printer bed")
 
                 print_job_count += 1
                 if run_with_gui:
                     print_to_stdout("print_job_count={0}".format(print_job_count))
+                    print_to_stdout("cycle_stats={0},{1},{2},{3}".format(print_start_time, bed_cooling_start_time, pick_and_place_start_time, pick_and_place_finished_time))
 
                 if print_job_count == self.app_config.max_print_jobs:
                     break
