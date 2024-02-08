@@ -132,12 +132,12 @@ class MainWindow(QMainWindow):
         self.printer_bed_pick_temp.setValue(self.app_config.get('printer_bed_pick_temp', 40))
         self.printer_bed_pick_temp.valueChanged.connect(self.printer_bed_pick_temp_changed)
 
-        self.max_cycle_time_label = QLabel("Max cycle time (seconds, for bar chart display)")
+        self.max_cycle_time_label = QLabel("Max cycle time (in minutes, for bar chart display)")
         self.max_cycle_time = QSpinBox()
-        self.max_cycle_time.setSingleStep(100)
-        self.max_cycle_time.setMinimum(100)
-        self.max_cycle_time.setMaximum(3600)
-        self.max_cycle_time.setValue(self.app_config.get('max_cycle_time', 300))
+        self.max_cycle_time.setSingleStep(1)
+        self.max_cycle_time.setMinimum(1)
+        self.max_cycle_time.setMaximum(60)
+        self.max_cycle_time.setValue(self.app_config.get('max_cycle_time', 20))
         self.max_cycle_time.valueChanged.connect(self.max_cycle_time_changed)
 
         self.stderr_display = QPlainTextEdit()
@@ -147,6 +147,9 @@ class MainWindow(QMainWindow):
         self.job_count_label = QLabel("Completed Job Count:")
         self.job_count = QLineEdit()
         self.job_count.setReadOnly(True)
+        self.last_completed_job_time_label = QLabel("Last Completed Job Time:")
+        self.last_completed_job_time = QLineEdit()
+        self.last_completed_job_time.setReadOnly(True)
         self.run_time_label = QLabel("Control Loop Run Time:")
         self.run_time = QLineEdit()
         self.run_time.setReadOnly(True)
@@ -165,17 +168,19 @@ class MainWindow(QMainWindow):
         self.bc_widget.addSeries(self.series)
 
         cycle_categories = [str(i) for i in range(1, self.app_config['max_jobs']+1)]
-        axisX = QBarCategoryAxis()
-        axisX.append(cycle_categories)
-        axisX.setTitleText("Job Count")
-        self.bc_widget.createDefaultAxes()
-        self.bc_widget.setAxisX(axisX, self.series)
+        self.axisX = QBarCategoryAxis()
+        self.axisX.append(cycle_categories)
+        self.axisX.setTitleText("Job Count")
+        self.bc_widget.setAxisX(self.axisX, self.series)
 
-        axisY = QValueAxis()
-        axisY.setRange(0, self.app_config.get('max_cycle_time', 300))
-        axisY.setLabelFormat('%i')
-        axisY.setTitleText("Seconds")
-        self.bc_widget.setAxisY(axisY, self.series)
+        self.axisY = QValueAxis()
+        self.axisY.setRange(0, self.app_config.get('max_cycle_time', 20))
+        self.axisY.setTickType(QValueAxis.TicksDynamic)
+        self.axisY.setTickAnchor(0)
+        self.axisY.setTickInterval(1)
+        self.axisY.setTitleText("Minutes")
+        self.bc_widget.addAxis(self.axisY, Qt.AlignLeft)
+        self.series.attachAxis(self.axisY)
 
         chartview = QChartView(self.bc_widget)
         chartview.setRenderHint(QPainter.Antialiasing)
@@ -184,8 +189,10 @@ class MainWindow(QMainWindow):
         session_stats_layout = QGridLayout()
         session_stats_layout.addWidget(self.job_count_label, 2, 0)
         session_stats_layout.addWidget(self.job_count, 2, 1)
-        session_stats_layout.addWidget(self.run_time_label, 3, 0)
-        session_stats_layout.addWidget(self.run_time, 3, 1)
+        session_stats_layout.addWidget(self.last_completed_job_time_label, 3, 0)
+        session_stats_layout.addWidget(self.last_completed_job_time, 3, 1)
+        session_stats_layout.addWidget(self.run_time_label, 4, 0)
+        session_stats_layout.addWidget(self.run_time, 4, 1)
 
         grid_layout_config_fields = QGridLayout()
         grid_layout_config_fields.addWidget(self.cobot_ip_address_label, 0, 0)
@@ -301,17 +308,21 @@ class MainWindow(QMainWindow):
     def on_save_config_click(self):
         json.dump(self.app_config, open(self.app_config_json, 'w'))
 
+        self.bc_widget.removeAxis(self.axisX)
         cycle_categories = [str(i) for i in range(1, self.app_config['max_jobs']+1)]
-        axisX = QBarCategoryAxis()
-        axisX.append(cycle_categories)
-        axisX.setTitleText("Job Count")
-        self.bc_widget.setAxisX(axisX, self.series)
+        self.axisX = QBarCategoryAxis()
+        self.axisX.append(cycle_categories)
+        self.axisX.setTitleText("Job Count")
+        self.bc_widget.setAxisX(self.axisX, self.series)
 
-        axisY = QValueAxis()
-        axisY.setRange(0, self.app_config['max_cycle_time'])
-        axisY.setLabelFormat('%i')
-        axisY.setTitleText("Seconds")
-        self.bc_widget.setAxisY(axisY, self.series)
+        self.bc_widget.removeAxis(self.axisY)
+        self.axisY = QValueAxis()
+        self.axisY.setRange(0, self.app_config['max_cycle_time'])
+        self.axisY.setTickType(QValueAxis.TicksDynamic)
+        self.axisY.setTickAnchor(0)
+        self.axisY.setTickInterval(1)
+        self.axisY.setTitleText("Minutes")
+        self.bc_widget.setAxisY(self.axisY, self.series)
 
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
@@ -351,6 +362,10 @@ class MainWindow(QMainWindow):
             self.printing_bar_set.remove(0, self.printing_bar_set.count())
             self.cooling_bar_set.remove(0, self.cooling_bar_set.count())
             self.pick_and_place_bar_set.remove(0,self.pick_and_place_bar_set.count())
+
+            self.job_count.clear()
+            self.last_completed_job_time.clear()
+            self.run_time.clear()
 
             self.p = QProcess()
             self.p.readyReadStandardOutput.connect(self.handle_stdout)
@@ -403,7 +418,10 @@ class MainWindow(QMainWindow):
                 self.run_time.setText(str(datetime.timedelta(seconds=runtime_seconds)))
         if 'cycle_stats' in data:
             raw_cycle_stats = [int(i) for i in data['cycle_stats'].split(',')]
-            cycle_stats = [raw_cycle_stats[i + 1] - raw_cycle_stats[i] for i in range(len(raw_cycle_stats) - 1)]
+            cycle_runtime_seconds = raw_cycle_stats[-1] - raw_cycle_stats[0]
+            self.last_completed_job_time.setText(str(datetime.timedelta(seconds=cycle_runtime_seconds)))
+
+            cycle_stats = [(raw_cycle_stats[i + 1] - raw_cycle_stats[i])/60 for i in range(len(raw_cycle_stats) - 1)]
             self.printing_bar_set.append(cycle_stats[0])
             self.cooling_bar_set.append(cycle_stats[1])
             self.pick_and_place_bar_set.append(cycle_stats[2])
@@ -423,6 +441,7 @@ class MainWindow(QMainWindow):
         self.start_button.setDisabled(False)
         self.config_widget.setDisabled(False)
         self.p = None
+        self.start_time = None
 
 
 app = QApplication(sys.argv)
