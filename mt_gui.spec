@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('control_loop_configuration.xml', '.'), ('small-block-logo.jpg', '.'),
-        ('mt_control_loop.py', '.'), ('universal lego brick v13.jpg', '.'), ('app_config.json', '.'),'
+        ('mt_control_loop.py', '.'), ('universal lego brick v13.jpg', '.'), ('app_config.json', '.'),
         ('UR logo.jpg', '.')],
     hiddenimports=[],
     hookspath=[],
