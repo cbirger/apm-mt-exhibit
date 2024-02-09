@@ -19,6 +19,7 @@ OCTOPRINT_URL = "http://127.0.0.1:5000"
 GCODE_WITH_PRIME_LINE = "MT_prime_line.gcode"
 GCODE_NO_PRIME_LINE = "MT_no_prime_line.gcode"
 PRINTER_BED_TEMP_THRESHOLD = 40
+WATCHDOG_TIMER_INTERVAL = 0.25
 
 class AppConfig:
     def __init__(self, app_config_json, rtde_config_xml):
@@ -34,7 +35,7 @@ class AppConfig:
         self.printer_bed_pick_temp = config_data_from_json.get('printer_bed_pick_temp', PRINTER_BED_TEMP_THRESHOLD)
         self.gcode_with_prime_line = config_data_from_json.get('gcode_filename', GCODE_WITH_PRIME_LINE)
         self.gcode_no_prime_line = config_data_from_json.get('gcode_no_prime_filename', GCODE_NO_PRIME_LINE)
-
+        self.watchdog_timer_interval = config_data_from_json.get('watchdog_timer_interval', WATCHDOG_TIMER_INTERVAL)
 
 def print_to_stderr(message):
     sys.stderr.write(message)
@@ -217,7 +218,8 @@ class ControlLoop:
         # create cobot watchdog kicker thread
         stop_thread_event = threading.Event()
         kicker_thread = threading.Thread(target=kick_cobot_watchdog,
-                                         args=(0.5, cobot_client, stop_thread_event, run_with_gui))
+                                         args=(self.app_config.watchdog_timer_interval,
+                                               cobot_client, stop_thread_event, run_with_gui))
 
         # start data synchronization
         print_to_stderr("Start data synchronization with UR Cobot")
@@ -264,11 +266,10 @@ class ControlLoop:
                 printer_client.printer_cmd_wait('Printing')
 
                 print_to_stderr("print job complete")
-
+                print_to_stderr('waiting for bed to cool...')
                 printer_client.printer_bed_temp_wait_until(self.app_config.printer_bed_pick_temp)
 
                 bed_cooling_start_time = int(time.time())
-                print_to_stderr('waiting for bed to cool...')
 
                 printer_client.printer_cmd_wait_until('Operational')
 

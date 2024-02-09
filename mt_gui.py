@@ -6,11 +6,20 @@ import json
 from PyQt5.QtCore import Qt, QProcess
 from PyQt5.QtGui import QPixmap, QPainter
 from PyQt5.QtWidgets import QMainWindow, QLabel, QApplication, QGridLayout, QWidget, QPushButton, \
-    QPlainTextEdit, QMessageBox, QLineEdit, QVBoxLayout, QHBoxLayout, QSpinBox, QToolBar, QTabWidget
+    QPlainTextEdit, QMessageBox, QLineEdit, QVBoxLayout, QHBoxLayout, QSpinBox, QTabWidget, QDoubleSpinBox
 from PyQt5.QtChart import QChart, QChartView, QBarSet, QBarCategoryAxis, QStackedBarSeries, QValueAxis
 
 APP_CONFIG_JSON = 'app_config.json'
 
+GLOBAL_STYLE = """QPushButton, QLineEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox { 
+    border: 1px solid;
+    border-color: grey;
+    font-size: 18px;
+    }
+    
+    QPushButton {font-size: 30px; border-radius: 8px}
+    QLabel {font-size: 20px}
+    """
 
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath("__file")))
@@ -55,6 +64,10 @@ class MainWindow(QMainWindow):
         apm_logo = QLabel("APM Logo")
         apm_logo.setPixmap(QPixmap(resource_path("small-block-logo.jpg")))
         apm_logo.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+        ur_logo = QLabel("UR Logo")
+        ur_logo.setPixmap(QPixmap(resource_path("UR logo.jpg")))
+        ur_logo.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
         lego_brick_drawing = QLabel("Lego Brick")
         lego_brick_drawing.setPixmap(QPixmap(resource_path("universal lego brick v13.jpg")))
@@ -125,20 +138,31 @@ class MainWindow(QMainWindow):
         self.octoprint_url.setText(self.app_config.get("octoprint_url", "127.0.0.1:5000"))
         self.octoprint_url.textEdited.connect(self.octoprint_url_edited)
 
-        self.printer_bed_pick_temp_label = QLabel("Printer Bed Pick Temp (C)", )
+        self.printer_bed_pick_temp_label = QLabel("Printer Bed Pick Temp", )
         self.printer_bed_pick_temp = QSpinBox()
         self.printer_bed_pick_temp.setMinimum(25)
         self.printer_bed_pick_temp.setMaximum(60)
+        self.printer_bed_pick_temp.setSuffix(' C')
         self.printer_bed_pick_temp.setValue(self.app_config.get('printer_bed_pick_temp', 40))
         self.printer_bed_pick_temp.valueChanged.connect(self.printer_bed_pick_temp_changed)
 
-        self.max_cycle_time_label = QLabel("Max cycle time (in minutes, for bar chart display)")
+        self.max_cycle_time_label = QLabel("Max cycle time (for bar chart display)")
         self.max_cycle_time = QSpinBox()
         self.max_cycle_time.setSingleStep(1)
         self.max_cycle_time.setMinimum(1)
         self.max_cycle_time.setMaximum(60)
+        self.max_cycle_time.setSuffix(' min')
         self.max_cycle_time.setValue(self.app_config.get('max_cycle_time', 20))
         self.max_cycle_time.valueChanged.connect(self.max_cycle_time_changed)
+
+        self.watchdog_timer_interval_label = QLabel("Cobot Watchdog Timer Interval (sec)")
+        self.watchdog_timer_interval = QDoubleSpinBox()
+        self.watchdog_timer_interval.setRange(0.1,0.5)
+        self.watchdog_timer_interval.setSingleStep(0.05)
+        self.watchdog_timer_interval.setSuffix(' sec')
+        self.watchdog_timer_interval.setStyleSheet("border: 1px solid; border-color:grey")
+        self.watchdog_timer_interval.setValue(self.app_config.get("watchdog_timer_interval", 0.25))
+        self.watchdog_timer_interval.valueChanged.connect(self.watchdog_timer_interval_edited)
 
         self.stderr_display = QPlainTextEdit()
         self.stderr_display.setReadOnly(True)
@@ -175,9 +199,9 @@ class MainWindow(QMainWindow):
 
         self.axisY = QValueAxis()
         self.axisY.setRange(0, self.app_config.get('max_cycle_time', 20))
-        self.axisY.setTickType(QValueAxis.TicksDynamic)
+        self.axisY.setTickType(QValueAxis.TicksFixed)
         self.axisY.setTickAnchor(0)
-        self.axisY.setTickInterval(1)
+        self.axisY.setTickInterval(1.0)
         self.axisY.setTitleText("Minutes")
         self.bc_widget.addAxis(self.axisY, Qt.AlignLeft)
         self.series.attachAxis(self.axisY)
@@ -187,30 +211,34 @@ class MainWindow(QMainWindow):
         self.bc_widget.setMinimumHeight(300)
 
         session_stats_layout = QGridLayout()
-        session_stats_layout.addWidget(self.job_count_label, 2, 0)
-        session_stats_layout.addWidget(self.job_count, 2, 1)
-        session_stats_layout.addWidget(self.last_completed_job_time_label, 3, 0)
-        session_stats_layout.addWidget(self.last_completed_job_time, 3, 1)
-        session_stats_layout.addWidget(self.run_time_label, 4, 0)
-        session_stats_layout.addWidget(self.run_time, 4, 1)
+        session_stats_layout.addWidget(self.job_count_label, 0, 0)
+        session_stats_layout.addWidget(self.job_count, 0, 1)
+        session_stats_layout.addWidget(self.last_completed_job_time_label, 1, 0)
+        session_stats_layout.addWidget(self.last_completed_job_time, 1, 1)
+        session_stats_layout.addWidget(self.run_time_label, 2, 0)
+        session_stats_layout.addWidget(self.run_time, 2, 1)
 
-        grid_layout_config_fields = QGridLayout()
-        grid_layout_config_fields.addWidget(self.cobot_ip_address_label, 0, 0)
-        grid_layout_config_fields.addWidget(self.cobot_ip_address, 0, 1)
-        grid_layout_config_fields.addWidget(self.max_jobs_label, 1, 0)
-        grid_layout_config_fields.addWidget(self.max_jobs, 1, 1)
-        grid_layout_config_fields.addWidget(self.octoprint_api_key_label, 2, 0)
-        grid_layout_config_fields.addWidget(self.octoprint_api_key, 2, 1)
-        grid_layout_config_fields.addWidget(self.octoprint_url_label, 3, 0)
-        grid_layout_config_fields.addWidget(self.octoprint_url, 3, 1)
-        grid_layout_config_fields.addWidget(self.printer_bed_pick_temp_label, 4, 0)
-        grid_layout_config_fields.addWidget(self.printer_bed_pick_temp, 4, 1)
-        grid_layout_config_fields.addWidget(self.gcode_with_prime_line_label, 5, 0)
-        grid_layout_config_fields.addWidget(self.gcode_with_prime_line, 5, 1)
-        grid_layout_config_fields.addWidget(self.gcode_no_prime_line_label, 6, 0)
-        grid_layout_config_fields.addWidget(self.gcode_no_prime_line, 6, 1)
-        grid_layout_config_fields.addWidget(self.max_cycle_time_label, 7, 0)
-        grid_layout_config_fields.addWidget(self.max_cycle_time, 7, 1)
+        grid_layout_basic_config_fields = QGridLayout()
+        grid_layout_basic_config_fields.addWidget(self.max_jobs_label, 1, 0)
+        grid_layout_basic_config_fields.addWidget(self.max_jobs, 1, 1)
+        grid_layout_basic_config_fields.addWidget(self.gcode_with_prime_line_label, 2, 0)
+        grid_layout_basic_config_fields.addWidget(self.gcode_with_prime_line, 2, 1)
+        grid_layout_basic_config_fields.addWidget(self.gcode_no_prime_line_label, 3, 0)
+        grid_layout_basic_config_fields.addWidget(self.gcode_no_prime_line, 3, 1)
+        grid_layout_basic_config_fields.addWidget(self.printer_bed_pick_temp_label, 4, 0)
+        grid_layout_basic_config_fields.addWidget(self.printer_bed_pick_temp, 4, 1)
+        grid_layout_basic_config_fields.addWidget(self.max_cycle_time_label, 5, 0)
+        grid_layout_basic_config_fields.addWidget(self.max_cycle_time, 5, 1)
+
+        grid_layout_advanced_config_fields = QGridLayout()
+        grid_layout_advanced_config_fields.addWidget(self.cobot_ip_address_label, 0, 0)
+        grid_layout_advanced_config_fields.addWidget(self.cobot_ip_address, 0, 1)
+        grid_layout_advanced_config_fields.addWidget(self.octoprint_api_key_label, 1, 0)
+        grid_layout_advanced_config_fields.addWidget(self.octoprint_api_key, 1, 1)
+        grid_layout_advanced_config_fields.addWidget(self.octoprint_url_label, 2, 0)
+        grid_layout_advanced_config_fields.addWidget(self.octoprint_url, 2, 1)
+        grid_layout_advanced_config_fields.addWidget(self.watchdog_timer_interval_label, 3, 0)
+        grid_layout_advanced_config_fields.addWidget(self.watchdog_timer_interval, 3, 1)
 
         horizontal_layout_config_buttons = QHBoxLayout()
         horizontal_layout_config_buttons.addWidget(self.save_config_button)
@@ -218,10 +246,11 @@ class MainWindow(QMainWindow):
 
         graphics_layout = QHBoxLayout()
         graphics_layout.addWidget(apm_logo)
-        graphics_layout.addWidget(lego_brick_drawing)
+        graphics_layout.addWidget(ur_logo)
 
         status_layout_left = QVBoxLayout()
         status_layout_left.addLayout(graphics_layout)
+        status_layout_left.addWidget(lego_brick_drawing)
         status_layout_left.addLayout(session_stats_layout)
         status_layout = QHBoxLayout()
         status_layout.addLayout(status_layout_left)
@@ -236,9 +265,20 @@ class MainWindow(QMainWindow):
         vertical_layout_run_tab.addWidget(chartview)
         vertical_layout_run_tab.addLayout(start_stop_layout)
 
-        grid_layout_config = QGridLayout()
-        grid_layout_config.addLayout(grid_layout_config_fields, 0, 0)
-        grid_layout_config.addLayout(horizontal_layout_config_buttons, 1, 0)
+        label1 = QLabel('Basic')
+        hlayout1 = QHBoxLayout()
+        hlayout1.addWidget(label1)
+        label2 = QLabel('Advanced (changes require coordination with Cobot and Octoprint configurations)')
+        hlayout2 = QHBoxLayout()
+        hlayout2.addWidget(label2)
+
+        vertical_layout_config_tab = QVBoxLayout()
+        vertical_layout_config_tab.addLayout(hlayout1)
+        vertical_layout_config_tab.addLayout(grid_layout_basic_config_fields)
+        vertical_layout_config_tab.addLayout(hlayout2)
+        vertical_layout_config_tab.addLayout(grid_layout_advanced_config_fields)
+        vertical_layout_config_tab.insertSpacing(5,100)
+        vertical_layout_config_tab.addLayout(horizontal_layout_config_buttons)
 
         tabs = QTabWidget()
         tabs.setTabPosition(QTabWidget.North)
@@ -249,7 +289,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(self.run_widget, "Run")
 
         self.config_widget = QWidget()
-        self.config_widget.setLayout(grid_layout_config)
+        self.config_widget.setLayout(vertical_layout_config_tab)
         tabs.addTab(self.config_widget, "Config")
 
         self.setCentralWidget(tabs)
@@ -305,6 +345,12 @@ class MainWindow(QMainWindow):
         self.save_config_button.setDisabled(False)
         self.cancel_config_button.setDisabled(False)
 
+    def watchdog_timer_interval_edited(self, x):
+        self.app_config['watchdog_timer_interval'] = x
+        self.run_widget.setDisabled(True)
+        self.save_config_button.setDisabled(False)
+        self.cancel_config_button.setDisabled(False)
+
     def on_save_config_click(self):
         json.dump(self.app_config, open(self.app_config_json, 'w'))
 
@@ -318,9 +364,9 @@ class MainWindow(QMainWindow):
         self.bc_widget.removeAxis(self.axisY)
         self.axisY = QValueAxis()
         self.axisY.setRange(0, self.app_config['max_cycle_time'])
-        self.axisY.setTickType(QValueAxis.TicksDynamic)
+        self.axisY.setTickType(QValueAxis.TicksFixed)
         self.axisY.setTickAnchor(0)
-        self.axisY.setTickInterval(1)
+        self.axisY.setTickInterval(1.0)
         self.axisY.setTitleText("Minutes")
         self.bc_widget.setAxisY(self.axisY, self.series)
 
@@ -409,7 +455,7 @@ class MainWindow(QMainWindow):
         result = bytes(self.p.readAllStandardOutput()).decode("utf8")
         data = extract_vars(result)
         if 'print_job_count' in data:
-            self.job_count.setText(data['print_job_count'])
+            self.job_count.setText("{0} of {1}".format(data['print_job_count'], self.app_config['max_jobs']))
         if 'start_time' in data:
             self.start_time = int(data['start_time'])
         if 'current_time' in data:
@@ -445,6 +491,7 @@ class MainWindow(QMainWindow):
 
 
 app = QApplication(sys.argv)
+app.setStyleSheet(GLOBAL_STYLE)
 
 window = MainWindow()
 window.show()
