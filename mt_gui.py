@@ -11,16 +11,15 @@ from PyQt5.QtChart import QChart, QChartView, QBarSet, QBarCategoryAxis, QStacke
 
 APP_CONFIG_JSON = 'app_config.json'
 
-GLOBAL_STYLE = """QPushButton, QLineEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox { 
+GLOBAL_STYLE = """ QLineEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox { 
     border: 1px solid;
     border-color: grey;
-    font-size: 18px;
+    font-size: 17px;
     }
-    
-    QPushButton {font-size: 30px; border-radius: 8px}
-    QLabel {font-size: 20px}
+    QLabel {font-size: 17px}
+    QPushButton:hover {background-color: lightblue;}
     """
-
+# QPushButton {font-size: 30px; border-radius: 8px}
 def resource_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath("__file")))
     return os.path.join(base_path, relative_path)
@@ -78,6 +77,7 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         font.setPointSize(20)
         self.start_button.setFont(font)
+        self.start_button.setStyleSheet("border: 1px solid; border-radius: 5px; border-color: grey")
         self.start_button.setToolTip("Start the Machine Tending Control Loop")
         self.start_button.clicked.connect(self.on_start_click)
 
@@ -86,6 +86,7 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         font.setPointSize(20)
         self.stop_button.setFont(font)
+        self.stop_button.setStyleSheet("border: 1px solid; border-radius: 5px; border-color: grey")
         self.stop_button.setToolTip("Stop the Machine Tending Control Loop")
         self.stop_button.clicked.connect(self.on_stop_click)
         self.stop_button.setDisabled(True)
@@ -95,6 +96,7 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         font.setPointSize(20)
         self.save_config_button.setFont(font)
+        self.save_config_button.setStyleSheet("border: 1px solid; border-radius: 5px; border-color: grey")
         self.save_config_button.clicked.connect(self.on_save_config_click)
         self.save_config_button.setDisabled(True)
 
@@ -103,6 +105,7 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         font.setPointSize(20)
         self.cancel_config_button.setFont(font)
+        self.cancel_config_button.setStyleSheet("border: 1px solid; border-radius: 5px; border-color: grey")
         self.cancel_config_button.clicked.connect(self.on_cancel_config_click)
         self.cancel_config_button.setDisabled(True)
 
@@ -382,6 +385,12 @@ class MainWindow(QMainWindow):
         self.max_jobs.setValue(self.app_config.get('max_jobs', 0))
         self.gcode_with_prime_line.setText(self.app_config.get('gcode_filename', ''))
         self.gcode_no_prime_line.setText(self.app_config.get('gcode_no_prime_filename', ''))
+        self.octoprint_api_key.setText(self.app_config.get('octoprint_api_key', ''))
+        self.octoprint_url.setText(self.app_config.get("octoprint_url", "127.0.0.1:5000"))
+        self.printer_bed_pick_temp.setValue(self.app_config.get('printer_bed_pick_temp', 40))
+        self.max_cycle_time.setValue(self.app_config.get('max_cycle_time', 20))
+        self.watchdog_timer_interval.setValue(self.app_config.get("watchdog_timer_interval", 0.25))
+
         self.start_button.setDisabled(False)
         self.stop_button.setDisabled(True)
         self.run_widget.setDisabled(False)
