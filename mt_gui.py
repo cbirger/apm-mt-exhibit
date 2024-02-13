@@ -158,7 +158,7 @@ class MainWindow(QMainWindow):
         self.max_cycle_time.setValue(self.app_config.get('max_cycle_time', 20))
         self.max_cycle_time.valueChanged.connect(self.max_cycle_time_changed)
 
-        self.watchdog_timer_interval_label = QLabel("Cobot Watchdog Timer Interval (sec)")
+        self.watchdog_timer_interval_label = QLabel("Cobot Watchdog Timer Interval")
         self.watchdog_timer_interval = QDoubleSpinBox()
         self.watchdog_timer_interval.setRange(0.1,0.5)
         self.watchdog_timer_interval.setSingleStep(0.05)
@@ -174,7 +174,7 @@ class MainWindow(QMainWindow):
         self.job_count_label = QLabel("Completed Job Count:")
         self.job_count = QLineEdit()
         self.job_count.setReadOnly(True)
-        self.last_completed_job_time_label = QLabel("Last Completed Job Time:")
+        self.last_completed_job_time_label = QLabel("Last Job Cycle Time:")
         self.last_completed_job_time = QLineEdit()
         self.last_completed_job_time.setReadOnly(True)
         self.run_time_label = QLabel("Control Loop Run Time:")
