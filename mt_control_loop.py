@@ -249,10 +249,10 @@ class ControlLoop:
                     if run_with_gui:
                         print_to_stdout("print_job_count={0}".format(print_job_count))
                     # select print job for first pass
-                    printer_client.con.select(GCODE_WITH_PRIME_LINE, print=False)
+                    printer_client.con.select(self.app_config.gcode_with_prime_line, print=False)
                     time.sleep(1)
                     selected_filename = printer_client.con.job_info()['job']['file']['name']
-                    assert selected_filename == GCODE_WITH_PRIME_LINE
+                    assert selected_filename == self.app_config.gcode_with_prime_line
 
                 print_start_time = int(time.time())
                 print_to_stderr('start new print job')
@@ -275,10 +275,10 @@ class ControlLoop:
 
                 if print_job_count == 0:
                     # select print job for subsequent passes
-                    printer_client.con.select(GCODE_NO_PRIME_LINE, print=False)
+                    printer_client.con.select(self.app_config.gcode_no_prime_line, print=False)
                     time.sleep(1)
                     selected_filename = printer_client.con.job_info()['job']['file']['name']
-                    assert selected_filename == GCODE_NO_PRIME_LINE
+                    assert selected_filename == self.app_config.gcode_no_prime_line
 
                 cobot_status = cobot_client.get_cobot_status()
                 assert cobot_status.int != CobotClient.COBOT_STATUS_PICKING
